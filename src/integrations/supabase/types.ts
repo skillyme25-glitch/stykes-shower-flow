@@ -14,16 +14,199 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      orders: {
+        Row: {
+          address: string
+          completed_at: string | null
+          county: string
+          created_at: string
+          customer_name: string
+          email: string
+          id: string
+          installation_date: string
+          installation_slot: Database["public"]["Enums"]["installation_slot"]
+          notes: string
+          order_code: string
+          product_id: string
+          product_name: string
+          quantity: number
+          status: Database["public"]["Enums"]["order_status"]
+          technician_id: string | null
+          technician_name: string | null
+          total_kes: number
+          unit_price_kes: number
+          whatsapp: string
+        }
+        Insert: {
+          address: string
+          completed_at?: string | null
+          county: string
+          created_at?: string
+          customer_name: string
+          email: string
+          id?: string
+          installation_date: string
+          installation_slot: Database["public"]["Enums"]["installation_slot"]
+          notes?: string
+          order_code: string
+          product_id: string
+          product_name: string
+          quantity?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          technician_id?: string | null
+          technician_name?: string | null
+          total_kes: number
+          unit_price_kes: number
+          whatsapp: string
+        }
+        Update: {
+          address?: string
+          completed_at?: string | null
+          county?: string
+          created_at?: string
+          customer_name?: string
+          email?: string
+          id?: string
+          installation_date?: string
+          installation_slot?: Database["public"]["Enums"]["installation_slot"]
+          notes?: string
+          order_code?: string
+          product_id?: string
+          product_name?: string
+          quantity?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          technician_id?: string | null
+          technician_name?: string | null
+          total_kes?: number
+          unit_price_kes?: number
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "technicians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          image_url: string
+          is_available: boolean
+          name: string
+          price_kes: number
+          stock_count: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          image_url?: string
+          is_available?: boolean
+          name: string
+          price_kes?: number
+          stock_count?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          image_url?: string
+          is_available?: boolean
+          name?: string
+          price_kes?: number
+          stock_count?: number
+        }
+        Relationships: []
+      }
+      receipts: {
+        Row: {
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["receipt_kind"]
+          order_id: string
+          payload: Json
+          receipt_code: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["receipt_kind"]
+          order_id: string
+          payload?: Json
+          receipt_code: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["receipt_kind"]
+          order_id?: string
+          payload?: Json
+          receipt_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      technicians: {
+        Row: {
+          created_at: string
+          id: string
+          is_available: boolean
+          name: string
+          phone: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_available?: boolean
+          name: string
+          phone: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_available?: boolean
+          name?: string
+          phone?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_order_code: { Args: never; Returns: string }
+      generate_receipt_code: { Args: never; Returns: string }
     }
     Enums: {
-      [_ in never]: never
+      installation_slot: "morning" | "afternoon" | "evening"
+      order_status:
+        | "pending"
+        | "confirmed"
+        | "assigned"
+        | "completed"
+        | "cancelled"
+      receipt_kind: "order" | "completion"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +333,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      installation_slot: ["morning", "afternoon", "evening"],
+      order_status: [
+        "pending",
+        "confirmed",
+        "assigned",
+        "completed",
+        "cancelled",
+      ],
+      receipt_kind: ["order", "completion"],
+    },
   },
 } as const
