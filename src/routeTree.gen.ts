@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as OrderRouteImport } from './routes/order'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ReceiptOrderIdRouteImport } from './routes/receipt.$orderId'
 
 const OrderRoute = OrderRouteImport.update({
   id: '/order',
   path: '/order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -31,30 +37,34 @@ const ReceiptOrderIdRoute = ReceiptOrderIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/order' | '/receipt/$orderId'
+  fullPaths: '/' | '/admin' | '/order' | '/receipt/$orderId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/order' | '/receipt/$orderId'
-  id: '__root__' | '/' | '/order' | '/receipt/$orderId'
+  to: '/' | '/admin' | '/order' | '/receipt/$orderId'
+  id: '__root__' | '/' | '/admin' | '/order' | '/receipt/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   OrderRoute: typeof OrderRoute
   ReceiptOrderIdRoute: typeof ReceiptOrderIdRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/order'
       fullPath: '/order'
       preLoaderRoute: typeof OrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   OrderRoute: OrderRoute,
   ReceiptOrderIdRoute: ReceiptOrderIdRoute,
 }
