@@ -17,6 +17,7 @@ export type Database = {
       orders: {
         Row: {
           address: string
+          bathroom_photos: Json
           completed_at: string | null
           county: string
           created_at: string
@@ -27,6 +28,8 @@ export type Database = {
           installation_slot: Database["public"]["Enums"]["installation_slot"]
           notes: string
           order_code: string
+          photo_analysis: Json | null
+          prefer_whatsapp_photos: boolean
           product_id: string
           product_name: string
           quantity: number
@@ -35,10 +38,15 @@ export type Database = {
           technician_name: string | null
           total_kes: number
           unit_price_kes: number
+          verification_notes: string
+          verification_status: Database["public"]["Enums"]["verification_status"]
+          verified_at: string | null
+          verified_by: string | null
           whatsapp: string
         }
         Insert: {
           address: string
+          bathroom_photos?: Json
           completed_at?: string | null
           county: string
           created_at?: string
@@ -49,6 +57,8 @@ export type Database = {
           installation_slot: Database["public"]["Enums"]["installation_slot"]
           notes?: string
           order_code: string
+          photo_analysis?: Json | null
+          prefer_whatsapp_photos?: boolean
           product_id: string
           product_name: string
           quantity?: number
@@ -57,10 +67,15 @@ export type Database = {
           technician_name?: string | null
           total_kes: number
           unit_price_kes: number
+          verification_notes?: string
+          verification_status?: Database["public"]["Enums"]["verification_status"]
+          verified_at?: string | null
+          verified_by?: string | null
           whatsapp: string
         }
         Update: {
           address?: string
+          bathroom_photos?: Json
           completed_at?: string | null
           county?: string
           created_at?: string
@@ -71,6 +86,8 @@ export type Database = {
           installation_slot?: Database["public"]["Enums"]["installation_slot"]
           notes?: string
           order_code?: string
+          photo_analysis?: Json | null
+          prefer_whatsapp_photos?: boolean
           product_id?: string
           product_name?: string
           quantity?: number
@@ -79,6 +96,10 @@ export type Database = {
           technician_name?: string | null
           total_kes?: number
           unit_price_kes?: number
+          verification_notes?: string
+          verification_status?: Database["public"]["Enums"]["verification_status"]
+          verified_at?: string | null
+          verified_by?: string | null
           whatsapp?: string
         }
         Relationships: [
@@ -92,6 +113,13 @@ export type Database = {
           {
             foreignKeyName: "orders_technician_id_fkey"
             columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "technicians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_verified_by_fkey"
+            columns: ["verified_by"]
             isOneToOne: false
             referencedRelation: "technicians"
             referencedColumns: ["id"]
@@ -195,6 +223,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      archive_old_bathroom_photos: { Args: never; Returns: undefined }
       generate_order_code: { Args: never; Returns: string }
       generate_receipt_code: { Args: never; Returns: string }
     }
@@ -206,7 +235,14 @@ export type Database = {
         | "assigned"
         | "completed"
         | "cancelled"
+        | "verification_pending"
       receipt_kind: "order" | "completion"
+      verification_status:
+        | "not_required"
+        | "pending"
+        | "verified"
+        | "requires_clarification"
+        | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -341,8 +377,16 @@ export const Constants = {
         "assigned",
         "completed",
         "cancelled",
+        "verification_pending",
       ],
       receipt_kind: ["order", "completion"],
+      verification_status: [
+        "not_required",
+        "pending",
+        "verified",
+        "requires_clarification",
+        "rejected",
+      ],
     },
   },
 } as const

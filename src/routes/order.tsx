@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Loader2, User, Package, Calendar } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, User, Package, Calendar, Camera, X, ImagePlus } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { WhatsAppFloat } from "@/components/WhatsAppFloat";
@@ -15,12 +15,18 @@ export const Route = createFileRoute("/order")({
 
 type Product = { id: string; name: string; description: string; price_kes: number; image_url: string; stock_count: number; is_available: boolean };
 type Slot = "morning" | "afternoon" | "evening";
+type PendingPhoto = { id: string; file: File; preview: string };
+const MAX_PHOTOS = 4;
+const MAX_BYTES = 10 * 1024 * 1024;
 
 function OrderPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [products, setProducts] = useState<Product[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [photos, setPhotos] = useState<PendingPhoto[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     customer_name: "",
@@ -34,15 +40,38 @@ function OrderPage() {
     installation_date: "",
     installation_slot: "" as Slot | "",
     confirm: false,
+    prefer_whatsapp_photos: false,
   });
 
   useEffect(() => {
     supabase.from("products").select("*").order("name").then(({ data }) => setProducts((data ?? []) as Product[]));
   }, []);
 
+  useEffect(() => () => { photos.forEach((p) => URL.revokeObjectURL(p.preview)); }, [photos]);
+
   const today = new Date().toISOString().split("T")[0];
   const product = products.find((p) => p.id === form.product_id);
   const total = product ? product.price_kes * form.quantity : 0;
+
+  function addPhotos(files: FileList | null) {
+    if (!files) return;
+    const next: PendingPhoto[] = [];
+    Array.from(files).forEach((f) => {
+      if (photos.length + next.length >= MAX_PHOTOS) return toast.error(`Maximum ${MAX_PHOTOS} photos`);
+      if (f.size > MAX_BYTES) return toast.error(`${f.name} exceeds 10MB`);
+      const ok = /image\/(jpeg|jpg|png|heic|heif)/i.test(f.type) || /\.(jpe?g|png|heic|heif)$/i.test(f.name);
+      if (!ok) return toast.error(`${f.name}: only JPG, PNG, HEIC allowed`);
+      next.push({ id: crypto.randomUUID(), file: f, preview: URL.createObjectURL(f) });
+    });
+    if (next.length) setPhotos((p) => [...p, ...next].slice(0, MAX_PHOTOS));
+  }
+  function removePhoto(id: string) {
+    setPhotos((p) => {
+      const found = p.find((x) => x.id === id);
+      if (found) URL.revokeObjectURL(found.preview);
+      return p.filter((x) => x.id !== id);
+    });
+  }
 
   function validateStep(): boolean {
     if (step === 1) {
@@ -66,11 +95,15 @@ function OrderPage() {
   }
 
   async function submit() {
-    if (!validateStep() || !product) return;
+    if (!validateStep() || !product || !form.installation_slot) return;
     setSubmitting(true);
     try {
       const { data: codeRow } = await supabase.rpc("generate_order_code");
       const order_code = codeRow as unknown as string;
+
+      const hasPhotos = photos.length > 0;
+      const initialStatus = hasPhotos ? "verification_pending" : "pending";
+      const verificationStatus = hasPhotos ? "pending" : "not_required";
 
       const { data: order, error } = await supabase.from("orders").insert({
         order_code,
@@ -87,19 +120,47 @@ function OrderPage() {
         notes: form.notes,
         installation_date: form.installation_date,
         installation_slot: form.installation_slot,
-        status: "pending",
+        status: initialStatus,
+        verification_status: verificationStatus,
+        prefer_whatsapp_photos: form.prefer_whatsapp_photos,
       }).select().single();
       if (error) throw error;
+
+      // Upload photos to storage
+      const photoUrls: string[] = [];
+      if (hasPhotos) {
+        for (const p of photos) {
+          const ext = (p.file.name.split(".").pop() || "jpg").toLowerCase();
+          const path = `${order.id}/${crypto.randomUUID()}.${ext}`;
+          const { error: upErr } = await supabase.storage.from("bathroom-photos").upload(path, p.file, {
+            contentType: p.file.type || "image/jpeg",
+            upsert: false,
+          });
+          if (upErr) {
+            toast.error(`Photo upload failed: ${upErr.message}`);
+            continue;
+          }
+          const { data: pub } = supabase.storage.from("bathroom-photos").getPublicUrl(path);
+          photoUrls.push(pub.publicUrl);
+        }
+        if (photoUrls.length) {
+          await supabase.from("orders").update({ bathroom_photos: photoUrls }).eq("id", order.id);
+        }
+      }
 
       const { data: receiptCode } = await supabase.rpc("generate_receipt_code");
       await supabase.from("receipts").insert({
         receipt_code: receiptCode as unknown as string,
         order_id: order.id,
         kind: "order",
-        payload: { order },
+        payload: { order: { ...order, bathroom_photos: photoUrls } },
       });
 
-      toast.success(`Order placed! ${order_code}`);
+      if (hasPhotos) {
+        toast.success("Order placed! Our team will review your photos within 2 hours.");
+      } else {
+        toast.success(`Order ${order_code} placed! Send photos to WhatsApp 0704 624 888 within 24h.`);
+      }
       navigate({ to: "/receipt/$orderId", params: { orderId: order.id } });
     } catch (e: any) {
       toast.error(e.message ?? "Failed to place order");
@@ -125,7 +186,6 @@ function OrderPage() {
       </section>
 
       <div className="mx-auto -mt-10 max-w-4xl px-6 pb-24">
-        {/* Progress */}
         <div className="glass mb-8 rounded-2xl p-6 shadow-elegant">
           <div className="flex items-center justify-between">
             {steps.map((s, i) => {
@@ -213,6 +273,57 @@ function OrderPage() {
               <Field label="Special requests / notes (optional)">
                 <textarea className="ip min-h-[100px]" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Anything we should know?" />
               </Field>
+
+              {/* Site Photos */}
+              <div className="rounded-2xl border-2 border-dashed border-cyan/40 bg-cyan/5 p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Camera className="h-5 w-5 text-cyan" />
+                  <h3 className="font-display text-lg font-bold">Site Photos <span className="text-xs font-normal text-muted-foreground">(optional, strongly encouraged)</span></h3>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Upload clear photos of your bathroom showing the existing shower area, wall conditions, water inlet points, and ceiling. This helps us verify compatibility and prepare for a smooth installation. <strong className="text-foreground">Recommended: 2 wide-angle shots and 2 close-ups of the water inlets.</strong>
+                </p>
+
+                {photos.length > 0 && (
+                  <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {photos.map((p) => (
+                      <div key={p.id} className="relative aspect-square overflow-hidden rounded-xl border bg-muted shadow-card">
+                        <img src={p.preview} alt="bathroom" className="h-full w-full object-cover" />
+                        <button type="button" onClick={() => removePhoto(p.id)}
+                          className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white shadow-lg transition hover:bg-red-600">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {photos.length < MAX_PHOTOS && (
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => cameraInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 rounded-full bg-cyan-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-glow">
+                      <Camera className="h-4 w-4" /> Take Photo
+                    </button>
+                    <button type="button" onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 rounded-full border-2 border-cyan bg-white px-4 py-2.5 text-sm font-semibold text-cyan">
+                      <ImagePlus className="h-4 w-4" /> Choose from Gallery
+                    </button>
+                    <span className="self-center text-xs text-muted-foreground">{photos.length}/{MAX_PHOTOS} • JPG/PNG/HEIC • max 10MB each</span>
+                  </div>
+                )}
+
+                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+                  onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif" multiple className="hidden"
+                  onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
+
+                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border bg-white p-3">
+                  <input type="checkbox" checked={form.prefer_whatsapp_photos}
+                    onChange={(e) => setForm({ ...form, prefer_whatsapp_photos: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.72_0.14_220)]" />
+                  <span className="text-sm">I prefer to send photos via WhatsApp after ordering</span>
+                </label>
+              </div>
             </div>
           )}
 
@@ -237,6 +348,7 @@ function OrderPage() {
                 <Row k="WhatsApp" v={form.whatsapp} />
                 <Row k="Location" v={`${form.county}, ${form.address}`} />
                 {product && <Row k="Product" v={`${product.name} × ${form.quantity}`} />}
+                <Row k="Site photos" v={photos.length > 0 ? `${photos.length} attached (verification pending)` : form.prefer_whatsapp_photos ? "Will send via WhatsApp" : "Not uploaded"} />
                 <Row k="Total" v={<span className="font-bold text-gradient-gold">{formatKES(total)}</span>} />
               </div>
 
@@ -247,7 +359,6 @@ function OrderPage() {
             </div>
           )}
 
-          {/* Nav */}
           <div className="mt-10 flex items-center justify-between">
             <button onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step === 1}
               className="inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold disabled:opacity-40">

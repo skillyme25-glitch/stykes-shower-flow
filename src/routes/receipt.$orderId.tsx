@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Download, MessageCircle, Loader2, ArrowLeft, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { Download, MessageCircle, Loader2, ArrowLeft, ShieldCheck, CheckCircle2, Camera, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { WhatsAppFloat } from "@/components/WhatsAppFloat";
@@ -118,9 +118,17 @@ function ReceiptPage() {
 
             {order.status === "pending" && (
               <div className="rounded-xl bg-[oklch(0.97_0.04_85)] p-4 text-sm text-[oklch(0.40_0.12_60)]">
-                Our team will contact you on WhatsApp within 2 hours to confirm your order.
+                Thank you! For a smooth installation, please send photos of your bathroom to our WhatsApp <strong>0704 624 888</strong> within 24 hours. Our team will reach out to confirm your order.
               </div>
             )}
+            {order.status === "verification_pending" && (
+              <div className="rounded-xl bg-[oklch(0.95_0.07_290)] p-4 text-sm text-[oklch(0.35_0.18_290)]">
+                Thank you! Our team will review your bathroom photos within <strong>2 hours</strong> and confirm your installation can proceed as scheduled.
+              </div>
+            )}
+
+            {/* Site Verification */}
+            <SiteVerification order={order} />
           </div>
 
           <div className="border-t bg-muted/30 p-6 text-center text-xs text-muted-foreground">
@@ -179,6 +187,7 @@ function KV({ k, v, className = "" }: { k: string; v: React.ReactNode; className
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     pending:   { label: "🟡 Pending Confirmation", cls: "bg-[oklch(0.97_0.07_85)] text-[oklch(0.40_0.12_60)]" },
+    verification_pending: { label: "🟣 Photo Verification Pending", cls: "bg-[oklch(0.95_0.07_290)] text-[oklch(0.35_0.18_290)]" },
     confirmed: { label: "🔵 Confirmed",            cls: "bg-[oklch(0.95_0.05_240)] text-[oklch(0.30_0.12_240)]" },
     assigned:  { label: "🟠 Technician Assigned",  cls: "bg-[oklch(0.95_0.07_50)]  text-[oklch(0.40_0.15_40)]"  },
     completed: { label: "🟢 Completed",            cls: "bg-[oklch(0.95_0.06_140)] text-[oklch(0.35_0.12_140)]" },
@@ -186,4 +195,59 @@ function StatusBadge({ status }: { status: string }) {
   };
   const s = map[status] ?? map.pending;
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${s.cls}`}>{s.label}</span>;
+}
+
+function SiteVerification({ order }: { order: any }) {
+  const photos: string[] = Array.isArray(order.bathroom_photos) ? order.bathroom_photos : [];
+  if (photos.length === 0 && order.verification_status === "not_required") return null;
+  const vs = order.verification_status;
+
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Site Verification</h3>
+
+      {vs === "verified" && (
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[oklch(0.96_0.05_140)] px-3 py-1 text-sm font-semibold text-[oklch(0.35_0.12_140)]">
+          <ShieldCheck className="h-4 w-4" /> Site verified ✅ — ready for installation
+        </div>
+      )}
+      {vs === "pending" && (
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[oklch(0.95_0.07_290)] px-3 py-1 text-sm font-semibold text-[oklch(0.35_0.18_290)]">
+          <Camera className="h-4 w-4" /> Site photos received — verification pending
+        </div>
+      )}
+      {vs === "requires_clarification" && (
+        <div className="mb-3 space-y-2">
+          <div className="inline-flex items-center gap-2 rounded-full bg-[oklch(0.97_0.07_85)] px-3 py-1 text-sm font-semibold text-[oklch(0.40_0.12_60)]">
+            <AlertTriangle className="h-4 w-4" /> Additional info requested
+          </div>
+          {order.verification_notes && (
+            <div className="rounded-xl border border-[oklch(0.80_0.15_78)] bg-[oklch(0.98_0.05_85)] p-3 text-sm text-[oklch(0.35_0.12_60)]">
+              <p className="whitespace-pre-wrap">{order.verification_notes}</p>
+              <a href={`https://wa.me/254704624888?text=${encodeURIComponent(`Hi! Re order ${order.order_code}, sending additional photos.`)}`}
+                target="_blank" rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-2 rounded-full bg-cyan-gradient px-4 py-1.5 text-xs font-semibold text-white shadow-glow">
+                <MessageCircle className="h-3.5 w-3.5" /> Send photos via WhatsApp
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+      {vs === "rejected" && (
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[oklch(0.95_0.04_25)] px-3 py-1 text-sm font-semibold text-[oklch(0.45_0.18_25)]">
+          <AlertTriangle className="h-4 w-4" /> Site not suitable — see notes
+        </div>
+      )}
+
+      {photos.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {photos.map((u, i) => (
+            <a key={i} href={u} target="_blank" rel="noreferrer" className="aspect-square overflow-hidden rounded-lg border bg-muted">
+              <img src={u} alt={`Site ${i + 1}`} className="h-full w-full object-cover" />
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
