@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Lock, Loader2, Search, RefreshCw, LogOut, Package, Users, ListChecks, BarChart3, Check, UserCheck, Wrench, MessageCircle } from "lucide-react";
+import { Lock, Loader2, Search, RefreshCw, LogOut, Package, Users, ListChecks, BarChart3, Check, UserCheck, Wrench, MessageCircle, ShieldCheck, X, AlertTriangle, ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { SLOT_LABELS, formatKES } from "@/lib/kenya";
@@ -48,7 +48,7 @@ function Login({ onSubmit, pwd, setPwd }: { onSubmit: (v: string) => void; pwd: 
 }
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"orders" | "stock" | "techs" | "summary">("orders");
+  const [tab, setTab] = useState<"orders" | "verify" | "stock" | "techs" | "summary">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [techs, setTechs] = useState<Tech[]>([]);
@@ -73,6 +73,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   const tabs = [
     { k: "orders" as const, l: "Orders", icon: ListChecks },
+    { k: "verify" as const, l: "Verification Queue", icon: ShieldCheck },
     { k: "stock" as const, l: "Stock / Catalogue", icon: Package },
     { k: "techs" as const, l: "Technicians", icon: Users },
     { k: "summary" as const, l: "Summary", icon: BarChart3 },
@@ -100,6 +101,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       <main className="mx-auto max-w-7xl px-6 py-8">
         {tab === "orders" && <OrdersTab orders={orders} techs={techs} products={products} refresh={refresh} />}
+        {tab === "verify" && <VerificationTab orders={orders} refresh={refresh} />}
         {tab === "stock" && <StockTab products={products} refresh={refresh} />}
         {tab === "techs" && <TechsTab techs={techs} orders={orders} refresh={refresh} />}
         {tab === "summary" && <SummaryTab orders={orders} />}
@@ -346,6 +348,7 @@ function SummaryTab({ orders }: { orders: Order[] }) {
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { l: string; cls: string }> = {
     pending:   { l: "Pending",   cls: "bg-[oklch(0.97_0.07_85)] text-[oklch(0.40_0.12_60)]" },
+    verification_pending: { l: "Verify Photos", cls: "bg-[oklch(0.93_0.10_290)] text-[oklch(0.35_0.18_290)]" },
     confirmed: { l: "Confirmed", cls: "bg-[oklch(0.95_0.05_240)] text-[oklch(0.30_0.12_240)]" },
     assigned:  { l: "Assigned",  cls: "bg-[oklch(0.95_0.07_50)] text-[oklch(0.40_0.15_40)]" },
     completed: { l: "Completed", cls: "bg-[oklch(0.95_0.06_140)] text-[oklch(0.35_0.12_140)]" },
@@ -356,3 +359,192 @@ function StatusPill({ status }: { status: string }) {
 }
 
 function getFn() { return Loader2; }
+
+function VerificationTab({ orders, refresh }: { orders: Order[]; refresh: () => void }) {
+  const [selected, setSelected] = useState<Order | null>(null);
+  const queue = useMemo(() => orders.filter((o: Order) => {
+    const photos = Array.isArray(o.bathroom_photos) ? o.bathroom_photos : [];
+    return photos.length > 0 && o.verification_status === "pending";
+  }), [orders]);
+  const all = useMemo(() => orders.filter((o: Order) => (Array.isArray(o.bathroom_photos) ? o.bathroom_photos.length : 0) > 0), [orders]);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="Pending review" value={queue.length} accent="cyan" />
+        <Stat label="Verified" value={all.filter((o) => o.verification_status === "verified").length} accent="green" />
+        <Stat label="Needs clarification" value={all.filter((o) => o.verification_status === "requires_clarification").length} accent="gold" />
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
+        <div className="border-b bg-muted/40 px-5 py-3 text-sm font-semibold">Pending verification ({queue.length})</div>
+        {queue.length === 0 ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">No orders waiting for photo verification.</div>
+        ) : (
+          <div className="divide-y">
+            {queue.map((o) => {
+              const photos: string[] = o.bathroom_photos ?? [];
+              return (
+                <button key={o.id} onClick={() => setSelected(o)} className="flex w-full items-center gap-4 p-4 text-left transition hover:bg-muted/30">
+                  <div className="flex -space-x-2">
+                    {photos.slice(0, 4).map((u, i) => (
+                      <img key={i} src={u} alt="" className="h-14 w-14 rounded-lg border-2 border-white object-cover shadow" />
+                    ))}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold">{o.customer_name} <span className="ml-2 font-mono text-xs text-muted-foreground">{o.order_code}</span></div>
+                    <div className="text-xs text-muted-foreground">{o.county} · {o.address} · {o.product_name} ×{o.quantity}</div>
+                  </div>
+                  <span className="hidden rounded-full bg-cyan-gradient px-3 py-1 text-xs font-semibold text-white sm:inline">Review →</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {selected && <VerifyModal order={selected} onClose={() => setSelected(null)} onDone={() => { setSelected(null); refresh(); }} />}
+    </div>
+  );
+}
+
+function Stat({ label, value, accent }: { label: string; value: number; accent: "cyan" | "green" | "gold" }) {
+  const cls = accent === "cyan" ? "text-gradient-cyan" : accent === "green" ? "text-[oklch(0.55_0.16_145)]" : "text-gradient-gold";
+  return (
+    <div className="rounded-2xl border bg-card p-5 shadow-card">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`mt-2 font-display text-3xl font-bold ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
+function VerifyModal({ order, onClose, onDone }: { order: Order; onClose: () => void; onDone: () => void }) {
+  const photos: string[] = order.bathroom_photos ?? [];
+  const [notes, setNotes] = useState<string>(order.verification_notes ?? "");
+  const [busy, setBusy] = useState(false);
+  const [zoom, setZoom] = useState<string | null>(null);
+  const [clarMsg, setClarMsg] = useState("Hi! We reviewed your bathroom photos and need a few more details:\n\n- ");
+  const [showClar, setShowClar] = useState(false);
+
+  async function approve() {
+    setBusy(true);
+    const { error } = await supabase.from("orders").update({
+      verification_status: "verified",
+      verification_notes: notes,
+      verified_at: new Date().toISOString(),
+      status: "confirmed",
+    }).eq("id", order.id);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("Verified & confirmed");
+    onDone();
+  }
+
+  async function requestClar() {
+    if (!clarMsg.trim()) return toast.error("Type a message to the customer");
+    setBusy(true);
+    const { error } = await supabase.from("orders").update({
+      verification_status: "requires_clarification",
+      verification_notes: clarMsg,
+    }).eq("id", order.id);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    const wa = `https://wa.me/${order.whatsapp.replace("+", "")}?text=${encodeURIComponent(clarMsg)}`;
+    window.open(wa, "_blank");
+    toast.success("Clarification requested");
+    onDone();
+  }
+
+  async function reject() {
+    if (!notes.trim()) return toast.error("Please add a rejection reason in the notes");
+    if (!confirm("Reject this order? This marks it cannot be fulfilled.")) return;
+    setBusy(true);
+    const { error } = await supabase.from("orders").update({
+      verification_status: "rejected",
+      verification_notes: notes,
+      status: "cancelled",
+    }).eq("id", order.id);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("Order rejected & refund flagged");
+    onDone();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={onClose}>
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-elegant" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b bg-hero p-5 text-white">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-cyan">Site verification</div>
+            <div className="font-display text-xl font-bold">{order.customer_name} · <span className="font-mono text-sm">{order.order_code}</span></div>
+            <div className="text-xs text-white/70">{order.county}, {order.address} · {order.product_name} ×{order.quantity}</div>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"><X className="h-4 w-4" /></button>
+        </div>
+
+        <div className="p-5">
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Customer photos ({photos.length})</h4>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {photos.map((u, i) => (
+              <button key={i} onClick={() => setZoom(u)} className="aspect-square overflow-hidden rounded-xl border bg-muted shadow-card transition hover:scale-[1.02]">
+                <img src={u} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">Internal verification notes</label>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5}
+                className="w-full rounded-xl border bg-card p-3 text-sm outline-none focus:border-cyan"
+                placeholder="Wall condition, inlet compatibility, ceiling height, etc." />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">Order details</label>
+              <div className="rounded-xl border bg-muted/30 p-3 text-xs">
+                <div className="flex justify-between py-1"><span className="text-muted-foreground">WhatsApp</span><span>{order.whatsapp}</span></div>
+                <div className="flex justify-between py-1"><span className="text-muted-foreground">Installation</span><span>{order.installation_date} · {SLOT_LABELS[order.installation_slot]}</span></div>
+                <div className="flex justify-between py-1"><span className="text-muted-foreground">Total</span><span className="font-semibold">{formatKES(order.total_kes)}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {showClar && (
+            <div className="mt-4 rounded-xl border border-cyan/40 bg-cyan/5 p-3">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">Message to customer (WhatsApp)</label>
+              <textarea value={clarMsg} onChange={(e) => setClarMsg(e.target.value)} rows={4}
+                className="w-full rounded-xl border bg-white p-3 text-sm outline-none focus:border-cyan" />
+              <p className="mt-1 text-xs text-muted-foreground">Will open WhatsApp with this pre-filled message.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/30 p-4">
+          <button onClick={onClose} className="rounded-full border px-4 py-2 text-sm font-semibold hover:bg-muted">Close</button>
+          <button onClick={reject} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-[oklch(0.62_0.22_25)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60">
+            <X className="h-4 w-4" /> Reject
+          </button>
+          {!showClar ? (
+            <button onClick={() => setShowClar(true)} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-[oklch(0.78_0.15_78)] px-4 py-2 text-sm font-semibold text-[oklch(0.30_0.12_60)] hover:opacity-90 disabled:opacity-60">
+              <AlertTriangle className="h-4 w-4" /> Request Clarification
+            </button>
+          ) : (
+            <button onClick={requestClar} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-[oklch(0.78_0.15_78)] px-4 py-2 text-sm font-semibold text-[oklch(0.30_0.12_60)] hover:opacity-90 disabled:opacity-60">
+              <MessageCircle className="h-4 w-4" /> Send via WhatsApp
+            </button>
+          )}
+          <button onClick={approve} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-cyan-gradient px-4 py-2 text-sm font-semibold text-white shadow-glow hover:scale-[1.02] disabled:opacity-60">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Verify & Approve
+          </button>
+        </div>
+
+        {zoom && (
+          <div className="fixed inset-0 z-[60] grid place-items-center bg-black/90 p-4" onClick={() => setZoom(null)}>
+            <img src={zoom} alt="Full size" className="max-h-[92vh] max-w-full rounded-xl shadow-elegant" />
+            <button className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white"><X className="h-5 w-5" /></button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
