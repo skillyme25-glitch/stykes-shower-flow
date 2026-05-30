@@ -20,20 +20,36 @@ function ReceiptPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [orderReceipt, setOrderReceipt] = useState<Receipt | null>(null);
   const [completionReceipt, setCompletionReceipt] = useState<Receipt | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       const { data: o } = await supabase.from("orders").select("*").eq("id", orderId).maybeSingle();
       setOrder(o);
-      const { data: rs } = await supabase.from("receipts").select("*").eq("order_id", orderId);
-      const list = (rs ?? []) as Receipt[];
-      setOrderReceipt(list.find((r) => r.kind === "order") ?? null);
-      setCompletionReceipt(list.find((r) => r.kind === "completion") ?? null);
+      if (o) {
+        const { data: rs } = await supabase.from("receipts").select("*").eq("order_id", orderId);
+        const list = (rs ?? []) as Receipt[];
+        setOrderReceipt(list.find((r) => r.kind === "order") ?? null);
+        setCompletionReceipt(list.find((r) => r.kind === "completion") ?? null);
+      }
+      setLoading(false);
     })();
   }, [orderId]);
 
-  if (!order) {
+  if (loading) {
     return <div className="grid min-h-screen place-items-center"><Loader2 className="h-8 w-8 animate-spin text-cyan" /></div>;
+  }
+
+  if (!order) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-4">
+        <div className="max-w-md text-center">
+          <h1 className="font-display text-2xl font-bold">Order not found</h1>
+          <p className="mt-2 text-sm text-muted-foreground">This receipt link may be invalid or the order was removed.</p>
+          <Link to="/" className="mt-6 inline-flex rounded-full bg-cyan-gradient px-5 py-2 text-sm font-semibold text-white shadow-glow">Go home</Link>
+        </div>
+      </div>
+    );
   }
 
   const waMessage = encodeURIComponent(

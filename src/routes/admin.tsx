@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Lock, Loader2, Search, RefreshCw, LogOut, Package, Users, ListChecks, BarChart3, Check, UserCheck, Wrench, MessageCircle, ShieldCheck, X, AlertTriangle, ImageIcon } from "lucide-react";
+import { Lock, Loader2, Search, RefreshCw, LogOut, Package, Users, ListChecks, BarChart3, Check, UserCheck, Wrench, MessageCircle, ShieldCheck, X, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { SLOT_LABELS, formatKES } from "@/lib/kenya";
@@ -71,12 +71,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
+  const verifyCount = orders.filter((o) => Array.isArray(o.bathroom_photos) && o.bathroom_photos.length > 0 && o.verification_status === "pending").length;
+
   const tabs = [
-    { k: "orders" as const, l: "Orders", icon: ListChecks },
-    { k: "verify" as const, l: "Verification Queue", icon: ShieldCheck },
-    { k: "stock" as const, l: "Stock / Catalogue", icon: Package },
-    { k: "techs" as const, l: "Technicians", icon: Users },
-    { k: "summary" as const, l: "Summary", icon: BarChart3 },
+    { k: "orders" as const, l: "Orders", icon: ListChecks, badge: 0 },
+    { k: "verify" as const, l: "Verification Queue", icon: ShieldCheck, badge: verifyCount },
+    { k: "stock" as const, l: "Stock / Catalogue", icon: Package, badge: 0 },
+    { k: "techs" as const, l: "Technicians", icon: Users, badge: 0 },
+    { k: "summary" as const, l: "Summary", icon: BarChart3, badge: 0 },
   ];
 
   return (
@@ -94,6 +96,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <button key={t.k} onClick={() => setTab(t.k)}
               className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition ${tab === t.k ? "bg-cyan-gradient text-white shadow-glow" : "text-muted-foreground hover:bg-muted"}`}>
               <t.icon className="h-4 w-4" /> {t.l}
+              {t.badge > 0 && (
+                <span className="inline-grid h-5 min-w-5 place-items-center rounded-full bg-[oklch(0.62_0.22_25)] px-1 text-[10px] font-bold text-white">
+                  {t.badge}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -157,9 +164,11 @@ function OrdersTab({ orders, techs, products, refresh }: { orders: Order[]; tech
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border bg-card px-3 py-2.5 text-sm">
           <option value="all">All statuses</option>
           <option value="pending">Pending</option>
+          <option value="verification_pending">Verify Photos</option>
           <option value="confirmed">Confirmed</option>
           <option value="assigned">Assigned</option>
           <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
         </select>
       </div>
 
@@ -209,29 +218,46 @@ function OrdersTab({ orders, techs, products, refresh }: { orders: Order[]; tech
   );
 }
 
+function StockCard({ p, onRefresh }: { p: Product; onRefresh: () => void }) {
+  const [stockInput, setStockInput] = useState(String(p.stock_count));
+  useEffect(() => { setStockInput(String(p.stock_count)); }, [p.stock_count]);
+
+  async function toggle() { await supabase.from("products").update({ is_available: !p.is_available }).eq("id", p.id); toast.success("Updated"); onRefresh(); }
+  async function saveStock() {
+    const n = Math.max(0, Number(stockInput));
+    if (n === p.stock_count) return;
+    await supabase.from("products").update({ stock_count: n }).eq("id", p.id);
+    onRefresh();
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
+      <div className="aspect-[4/3] bg-muted"><img src={p.image_url} alt={p.name} className="h-full w-full object-cover" /></div>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div><h3 className="font-semibold">{p.name}</h3><div className="text-sm text-gradient-gold font-bold">{formatKES(p.price_kes)}</div></div>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${p.is_available && p.stock_count > 0 ? "bg-[oklch(0.95_0.06_140)] text-[oklch(0.35_0.12_140)]" : "bg-[oklch(0.95_0.04_25)] text-[oklch(0.45_0.18_25)]"}`}>
+            {p.is_available && p.stock_count > 0 ? "Available" : "Out of stock"}
+          </span>
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <label className="text-xs text-muted-foreground">Stock</label>
+          <input type="number" min={0} value={stockInput}
+            onChange={(e) => setStockInput(e.target.value)}
+            onBlur={saveStock}
+            onKeyDown={(e) => e.key === "Enter" && saveStock()}
+            className="w-20 rounded-lg border bg-white px-2 py-1 text-sm" />
+          <button onClick={toggle} className="ml-auto rounded-full border px-3 py-1 text-xs font-semibold hover:bg-muted">{p.is_available ? "Mark Out" : "Mark Available"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StockTab({ products, refresh }: { products: Product[]; refresh: () => void }) {
-  async function toggle(p: Product) { await supabase.from("products").update({ is_available: !p.is_available }).eq("id", p.id); toast.success("Updated"); refresh(); }
-  async function setStock(p: Product, n: number) { await supabase.from("products").update({ stock_count: Math.max(0, n) }).eq("id", p.id); refresh(); }
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {products.map((p) => (
-        <div key={p.id} className="overflow-hidden rounded-2xl border bg-card shadow-card">
-          <div className="aspect-[4/3] bg-muted"><img src={p.image_url} alt={p.name} className="h-full w-full object-cover" /></div>
-          <div className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div><h3 className="font-semibold">{p.name}</h3><div className="text-sm text-gradient-gold font-bold">{formatKES(p.price_kes)}</div></div>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${p.is_available && p.stock_count > 0 ? "bg-[oklch(0.95_0.06_140)] text-[oklch(0.35_0.12_140)]" : "bg-[oklch(0.95_0.04_25)] text-[oklch(0.45_0.18_25)]"}`}>
-                {p.is_available && p.stock_count > 0 ? "Available" : "Out of stock"}
-              </span>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">Stock</label>
-              <input type="number" min={0} defaultValue={p.stock_count} onBlur={(e) => setStock(p, Number(e.target.value))} className="w-20 rounded-lg border bg-white px-2 py-1 text-sm" />
-              <button onClick={() => toggle(p)} className="ml-auto rounded-full border px-3 py-1 text-xs font-semibold hover:bg-muted">{p.is_available ? "Mark Out" : "Mark Available"}</button>
-            </div>
-          </div>
-        </div>
-      ))}
+      {products.map((p) => <StockCard key={p.id} p={p} onRefresh={refresh} />)}
     </div>
   );
 }
@@ -285,13 +311,19 @@ function SummaryTab({ orders }: { orders: Order[] }) {
   const month = orders.filter((o) => new Date(o.created_at) >= startOfMonth);
   const revenue = orders.filter((o) => o.status === "completed").reduce((s, o) => s + o.total_kes, 0);
 
-  const buckets: Record<string, number> = { pending: 0, confirmed: 0, assigned: 0, completed: 0, cancelled: 0 };
+  const buckets: Record<string, number> = { pending: 0, verification_pending: 0, confirmed: 0, assigned: 0, completed: 0, cancelled: 0 };
   orders.forEach((o) => { buckets[o.status] = (buckets[o.status] ?? 0) + 1; });
   const total = orders.length || 1;
 
   const colorMap: Record<string, string> = {
-    pending: "oklch(0.80 0.15 78)", confirmed: "oklch(0.62 0.16 230)",
-    assigned: "oklch(0.72 0.18 50)", completed: "oklch(0.65 0.16 145)", cancelled: "oklch(0.62 0.22 25)",
+    pending: "oklch(0.80 0.15 78)", verification_pending: "oklch(0.72 0.20 290)",
+    confirmed: "oklch(0.62 0.16 230)", assigned: "oklch(0.72 0.18 50)",
+    completed: "oklch(0.65 0.16 145)", cancelled: "oklch(0.62 0.22 25)",
+  };
+  const statusLabels: Record<string, string> = {
+    pending: "Pending", verification_pending: "Verify Photos",
+    confirmed: "Confirmed", assigned: "Assigned",
+    completed: "Completed", cancelled: "Cancelled",
   };
   let acc = 0;
   const segs = Object.entries(buckets).map(([k, v]) => {
@@ -324,7 +356,7 @@ function SummaryTab({ orders }: { orders: Order[] }) {
             </div>
             <ul className="space-y-2 text-sm">
               {Object.entries(buckets).map(([k, v]) => (
-                <li key={k} className="flex items-center gap-3"><span className="h-3 w-3 rounded-full" style={{ background: colorMap[k] }} /><span className="capitalize">{k}</span><span className="ml-auto font-semibold">{v}</span></li>
+                <li key={k} className="flex items-center gap-3"><span className="h-3 w-3 rounded-full" style={{ background: colorMap[k] }} /><span>{statusLabels[k] ?? k}</span><span className="ml-auto font-semibold">{v}</span></li>
               ))}
             </ul>
           </div>
@@ -357,8 +389,6 @@ function StatusPill({ status }: { status: string }) {
   const s = map[status] ?? map.pending;
   return <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.cls}`}>{s.l}</span>;
 }
-
-function getFn() { return Loader2; }
 
 function VerificationTab({ orders, refresh }: { orders: Order[]; refresh: () => void }) {
   const [selected, setSelected] = useState<Order | null>(null);
@@ -428,14 +458,22 @@ function VerifyModal({ order, onClose, onDone }: { order: Order; onClose: () => 
 
   async function approve() {
     setBusy(true);
+    const { data: product } = await supabase.from("products").select("stock_count").eq("id", order.product_id).single();
+    if (product && product.stock_count < order.quantity) {
+      setBusy(false);
+      return toast.error("Not enough stock to confirm this order");
+    }
     const { error } = await supabase.from("orders").update({
       verification_status: "verified",
       verification_notes: notes,
       verified_at: new Date().toISOString(),
       status: "confirmed",
     }).eq("id", order.id);
+    if (error) { setBusy(false); return toast.error(error.message); }
+    if (product) {
+      await supabase.from("products").update({ stock_count: Math.max(0, product.stock_count - order.quantity) }).eq("id", order.product_id);
+    }
     setBusy(false);
-    if (error) return toast.error(error.message);
     toast.success("Verified & confirmed");
     onDone();
   }
