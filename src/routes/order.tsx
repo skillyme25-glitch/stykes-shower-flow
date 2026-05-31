@@ -49,6 +49,22 @@ function OrderPage() {
 
   useEffect(() => () => { photos.forEach((p) => URL.revokeObjectURL(p.preview)); }, [photos]);
 
+  const [slotStatus, setSlotStatus] = useState<"idle" | "checking" | "available" | "full">("idle");
+  useEffect(() => {
+    if (!form.installation_date || !form.installation_slot) { setSlotStatus("idle"); return; }
+    setSlotStatus("checking");
+    Promise.all([
+      supabase.from("orders").select("id", { count: "exact", head: true })
+        .eq("installation_date", form.installation_date)
+        .eq("installation_slot", form.installation_slot)
+        .in("status", ["confirmed", "assigned", "verification_pending"]),
+      supabase.from("technicians").select("id", { count: "exact", head: true }).eq("is_available", true),
+    ]).then(([{ count: booked }, { count: available }]) => {
+      const b = booked ?? 0; const a = available ?? 0;
+      setSlotStatus(a > 0 && b >= a ? "full" : "available");
+    });
+  }, [form.installation_date, form.installation_slot]);
+
   const today = new Date().toISOString().split("T")[0];
   const product = products.find((p) => p.id === form.product_id);
   const total = product ? product.price_kes * form.quantity : 0;
@@ -341,6 +357,23 @@ function OrderPage() {
                   </select>
                 </Field>
               </div>
+
+              {slotStatus === "checking" && (
+                <div className="flex items-center gap-2 rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Checking availability…
+                </div>
+              )}
+              {slotStatus === "full" && (
+                <div className="rounded-xl border border-[oklch(0.80_0.15_78)] bg-[oklch(0.98_0.05_85)] px-4 py-3 text-sm text-[oklch(0.35_0.12_60)]">
+                  <p className="font-semibold">⚠️ All technicians are fully booked for this slot.</p>
+                  <p className="mt-1 text-xs">Please choose a different date or time slot. Our team will still receive your order and contact you to re-schedule if needed.</p>
+                </div>
+              )}
+              {slotStatus === "available" && (
+                <div className="flex items-center gap-2 rounded-xl border border-[oklch(0.78_0.15_140)] bg-[oklch(0.97_0.04_140)] px-4 py-3 text-sm font-medium text-[oklch(0.35_0.12_140)]">
+                  <Check className="h-4 w-4" /> This slot is available
+                </div>
+              )}
 
               <div className="rounded-2xl border bg-muted/40 p-5 text-sm">
                 <h3 className="mb-3 font-semibold">Order summary</h3>

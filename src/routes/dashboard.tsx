@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Lock, Loader2, Search, RefreshCw, LogOut, Package, Users, ListChecks, BarChart3, Check, UserCheck, Wrench, MessageCircle, ShieldCheck, X, AlertTriangle } from "lucide-react";
+import { Lock, Loader2, Search, RefreshCw, LogOut, Package, Users, ListChecks, BarChart3, Check, UserCheck, Wrench, MessageCircle, ShieldCheck, X, AlertTriangle, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { SLOT_LABELS, formatKES } from "@/lib/kenya";
@@ -48,7 +48,7 @@ function Login({ onSubmit, pwd, setPwd }: { onSubmit: (v: string) => void; pwd: 
 }
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"orders" | "verify" | "stock" | "techs" | "summary">("orders");
+  const [tab, setTab] = useState<"orders" | "verify" | "stock" | "techs" | "timetable" | "summary">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [techs, setTechs] = useState<Tech[]>([]);
@@ -76,6 +76,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const tabs = [
     { k: "orders" as const, l: "Orders", icon: ListChecks, badge: 0 },
     { k: "verify" as const, l: "Verification Queue", icon: ShieldCheck, badge: verifyCount },
+    { k: "timetable" as const, l: "Timetable", icon: CalendarDays, badge: 0 },
     { k: "stock" as const, l: "Stock / Catalogue", icon: Package, badge: 0 },
     { k: "techs" as const, l: "Technicians", icon: Users, badge: 0 },
     { k: "summary" as const, l: "Summary", icon: BarChart3, badge: 0 },
@@ -109,6 +110,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       <main className="mx-auto max-w-7xl px-6 py-8">
         {tab === "orders" && <OrdersTab orders={orders} techs={techs} products={products} refresh={refresh} />}
         {tab === "verify" && <VerificationTab orders={orders} refresh={refresh} />}
+        {tab === "timetable" && <TimetableTab orders={orders} techs={techs} refresh={refresh} />}
         {tab === "stock" && <StockTab products={products} refresh={refresh} />}
         {tab === "techs" && <TechsTab techs={techs} orders={orders} refresh={refresh} />}
         {tab === "summary" && <SummaryTab orders={orders} />}
@@ -372,6 +374,154 @@ function SummaryTab({ orders }: { orders: Order[] }) {
             ))}
           </ul>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TimetableTab({ orders, techs, refresh }: { orders: Order[]; techs: Tech[]; refresh: () => void }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+
+  const baseDay = new Date(); baseDay.setHours(0, 0, 0, 0);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(baseDay); d.setDate(d.getDate() + weekOffset * 7 + i); return d;
+  });
+  const slots: Array<"morning" | "afternoon" | "evening"> = ["morning", "afternoon", "evening"];
+  const slotShort: Record<string, string> = { morning: "AM", afternoon: "PM", evening: "Eve" };
+  const ds = (d: Date) => d.toISOString().split("T")[0];
+  const todayStr = ds(baseDay);
+
+  // Build lookup: techId → dateStr → slot → Order
+  const lookup: Record<string, Record<string, Record<string, Order>>> = {};
+  techs.forEach((t) => { lookup[t.id] = {}; });
+  orders
+    .filter((o) => ["assigned", "completed"].includes(o.status) && o.technician_id)
+    .forEach((o) => {
+      if (!lookup[o.technician_id]) lookup[o.technician_id] = {};
+      if (!lookup[o.technician_id][o.installation_date]) lookup[o.technician_id][o.installation_date] = {};
+      lookup[o.technician_id][o.installation_date][o.installation_slot] = o;
+    });
+
+  async function markDone(order: Order) {
+    setMarkingId(order.id);
+    const { error } = await supabase.from("orders").update({
+      status: "completed",
+      completed_at: new Date().toISOString(),
+    }).eq("id", order.id);
+    if (error) { setMarkingId(null); return toast.error(error.message); }
+    const { data: code } = await supabase.rpc("generate_receipt_code");
+    await supabase.from("receipts").insert({
+      receipt_code: code as unknown as string,
+      order_id: order.id,
+      kind: "completion",
+      payload: { order },
+    });
+    toast.success(`${order.order_code} marked complete — certificate generated`);
+    setMarkingId(null);
+    refresh();
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Week navigation */}
+      <div className="flex items-center gap-2">
+        <button onClick={() => setWeekOffset((w) => w - 1)}
+          className="inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-sm font-semibold hover:bg-muted">
+          <ChevronLeft className="h-4 w-4" /> Prev week
+        </button>
+        <span className="flex-1 text-center text-sm font-semibold">
+          {days[0].toLocaleDateString("en-KE", { day: "numeric", month: "short" })} —{" "}
+          {days[6].toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+        </span>
+        <button onClick={() => setWeekOffset((w) => w + 1)}
+          className="inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-sm font-semibold hover:bg-muted">
+          Next week <ChevronRight className="h-4 w-4" />
+        </button>
+        {weekOffset !== 0 && (
+          <button onClick={() => setWeekOffset(0)}
+            className="rounded-full bg-cyan-gradient px-3 py-1.5 text-xs font-semibold text-white shadow-glow">
+            Today
+          </button>
+        )}
+      </div>
+
+      {techs.length === 0 ? (
+        <div className="rounded-2xl border bg-card p-12 text-center text-sm text-muted-foreground">
+          No technicians added yet. Add technicians in the Technicians tab first.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border bg-card shadow-card">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr className="bg-muted/60">
+                <th className="min-w-[140px] p-3 text-left text-sm font-semibold">Technician</th>
+                {days.map((d) => (
+                  <th key={ds(d)} colSpan={3}
+                    className={`border-l p-2 text-center font-semibold ${ds(d) === todayStr ? "bg-cyan/10 text-cyan" : "text-muted-foreground"}`}>
+                    <div>{d.toLocaleDateString("en-KE", { weekday: "short" })}</div>
+                    <div className="text-[11px] font-normal">{d.toLocaleDateString("en-KE", { day: "numeric", month: "short" })}</div>
+                  </th>
+                ))}
+              </tr>
+              <tr className="bg-muted/30 text-muted-foreground">
+                <th className="p-2" />
+                {days.map((d) => slots.map((s) => (
+                  <th key={`hdr-${ds(d)}-${s}`} className="border-l px-1.5 py-1 text-center font-medium">
+                    {slotShort[s]}
+                  </th>
+                )))}
+              </tr>
+            </thead>
+            <tbody>
+              {techs.map((tech) => (
+                <tr key={tech.id} className="border-t">
+                  <td className="p-3">
+                    <div className="font-semibold">{tech.name}</div>
+                    <div className="text-muted-foreground">{tech.phone}</div>
+                  </td>
+                  {days.map((d) => slots.map((slot) => {
+                    const order = lookup[tech.id]?.[ds(d)]?.[slot];
+                    const isPast = ds(d) < todayStr;
+                    return (
+                      <td key={`${tech.id}-${ds(d)}-${slot}`}
+                        className={`border-l p-1 align-top ${ds(d) === todayStr ? "bg-cyan/5" : ""}`}
+                        style={{ minWidth: 80 }}>
+                        {order ? (
+                          order.status === "completed" ? (
+                            <div className="rounded-lg bg-[oklch(0.96_0.05_140)] p-1.5 text-center">
+                              <div className="font-mono font-semibold text-[oklch(0.35_0.12_140)]">{order.order_code}</div>
+                              <div className="mt-0.5 text-[10px] text-[oklch(0.45_0.10_140)]">✓ Done</div>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg bg-[oklch(0.95_0.07_50)] p-1.5 text-center">
+                              <div className="font-mono font-semibold text-[oklch(0.35_0.15_50)]">{order.order_code}</div>
+                              <div className="truncate text-[10px] text-muted-foreground">{order.customer_name}</div>
+                              <button onClick={() => markDone(order)} disabled={markingId === order.id}
+                                className="mt-1 w-full rounded bg-[oklch(0.65_0.16_145)] px-1 py-0.5 text-[10px] font-semibold text-white disabled:opacity-60">
+                                {markingId === order.id ? <Loader2 className="mx-auto h-3 w-3 animate-spin" /> : "✓ Mark Done"}
+                              </button>
+                            </div>
+                          )
+                        ) : (
+                          <div className={`rounded-lg p-1.5 text-center font-medium ${isPast ? "text-muted-foreground/30" : "bg-[oklch(0.97_0.04_140)] text-[oklch(0.50_0.12_140)]"}`}>
+                            {isPast ? "—" : "Free"}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  }))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-[oklch(0.97_0.04_140)]" /> Free</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-[oklch(0.95_0.07_50)]" /> Assigned</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-[oklch(0.96_0.05_140)]" /> Completed</span>
       </div>
     </div>
   );
