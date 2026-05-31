@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { SLOT_LABELS, formatKES } from "@/lib/kenya";
 
-export const Route = createFileRoute("/admin")({
+export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Admin Dashboard — Stykes Aquasmart" }] }),
   component: AdminPage,
 });

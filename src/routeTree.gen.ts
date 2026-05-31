@@ -10,7 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as OrderRouteImport } from './routes/order'
-import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdminRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ReceiptOrderIdRouteImport } from './routes/receipt.$orderId'
 
@@ -20,8 +20,8 @@ const OrderRoute = OrderRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,29 +37,29 @@ const ReceiptOrderIdRoute = ReceiptOrderIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/dashboard': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/dashboard': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/dashboard': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/order' | '/receipt/$orderId'
+  fullPaths: '/' | '/dashboard' | '/order' | '/receipt/$orderId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/order' | '/receipt/$orderId'
-  id: '__root__' | '/' | '/admin' | '/order' | '/receipt/$orderId'
+  to: '/' | '/dashboard' | '/order' | '/receipt/$orderId'
+  id: '__root__' | '/' | '/dashboard' | '/order' | '/receipt/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -78,10 +78,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrderRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
