@@ -387,20 +387,24 @@ function TimetableTab({ orders, techs, refresh }: { orders: Order[]; techs: Tech
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(baseDay); d.setDate(d.getDate() + weekOffset * 7 + i); return d;
   });
-  const slots: Array<"morning" | "afternoon" | "evening"> = ["morning", "afternoon", "evening"];
-  const slotShort: Record<string, string> = { morning: "AM", afternoon: "PM", evening: "Eve" };
+
+  const slots = [
+    { key: "morning" as const,   label: "Morning",   time: "8am – 12pm" },
+    { key: "afternoon" as const, label: "Afternoon", time: "12pm – 4pm" },
+    { key: "evening" as const,   label: "Evening",   time: "4pm – 7pm"  },
+  ];
+
   const ds = (d: Date) => d.toISOString().split("T")[0];
   const todayStr = ds(baseDay);
 
-  // Build lookup: techId → dateStr → slot → Order
-  const lookup: Record<string, Record<string, Record<string, Order>>> = {};
-  techs.forEach((t) => { lookup[t.id] = {}; });
+  // Build lookup: dateStr → slotKey → Order[]
+  const lookup: Record<string, Record<string, Order[]>> = {};
   orders
     .filter((o) => ["assigned", "completed"].includes(o.status) && o.technician_id)
     .forEach((o) => {
-      if (!lookup[o.technician_id]) lookup[o.technician_id] = {};
-      if (!lookup[o.technician_id][o.installation_date]) lookup[o.technician_id][o.installation_date] = {};
-      lookup[o.technician_id][o.installation_date][o.installation_slot] = o;
+      if (!lookup[o.installation_date]) lookup[o.installation_date] = {};
+      if (!lookup[o.installation_date][o.installation_slot]) lookup[o.installation_date][o.installation_slot] = [];
+      lookup[o.installation_date][o.installation_slot].push(o);
     });
 
   async function markDone(order: Order) {
@@ -446,82 +450,79 @@ function TimetableTab({ orders, techs, refresh }: { orders: Order[]; techs: Tech
         )}
       </div>
 
-      {techs.length === 0 ? (
-        <div className="rounded-2xl border bg-card p-12 text-center text-sm text-muted-foreground">
-          No technicians added yet. Add technicians in the Technicians tab first.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border bg-card shadow-card">
-          <table className="min-w-full text-xs">
-            <thead>
-              <tr className="bg-muted/60">
-                <th className="min-w-[140px] p-3 text-left text-sm font-semibold">Technician</th>
-                {days.map((d) => (
-                  <th key={ds(d)} colSpan={3}
-                    className={`border-l p-2 text-center font-semibold ${ds(d) === todayStr ? "bg-cyan/10 text-cyan" : "text-muted-foreground"}`}>
-                    <div>{d.toLocaleDateString("en-KE", { weekday: "short" })}</div>
-                    <div className="text-[11px] font-normal">{d.toLocaleDateString("en-KE", { day: "numeric", month: "short" })}</div>
-                  </th>
-                ))}
-              </tr>
-              <tr className="bg-muted/30 text-muted-foreground">
-                <th className="p-2" />
-                {days.map((d) => slots.map((s) => (
-                  <th key={`hdr-${ds(d)}-${s}`} className="border-l px-1.5 py-1 text-center font-medium">
-                    {slotShort[s]}
-                  </th>
-                )))}
-              </tr>
-            </thead>
-            <tbody>
-              {techs.map((tech) => (
-                <tr key={tech.id} className="border-t">
-                  <td className="p-3">
-                    <div className="font-semibold">{tech.name}</div>
-                    <div className="text-muted-foreground">{tech.phone}</div>
-                  </td>
-                  {days.map((d) => slots.map((slot) => {
-                    const order = lookup[tech.id]?.[ds(d)]?.[slot];
-                    const isPast = ds(d) < todayStr;
-                    return (
-                      <td key={`${tech.id}-${ds(d)}-${slot}`}
-                        className={`border-l p-1 align-top ${ds(d) === todayStr ? "bg-cyan/5" : ""}`}
-                        style={{ minWidth: 80 }}>
-                        {order ? (
-                          order.status === "completed" ? (
-                            <div className="rounded-lg bg-[oklch(0.96_0.05_140)] p-1.5 text-center">
-                              <div className="font-mono font-semibold text-[oklch(0.35_0.12_140)]">{order.order_code}</div>
-                              <div className="mt-0.5 text-[10px] text-[oklch(0.45_0.10_140)]">✓ Done</div>
-                            </div>
-                          ) : (
-                            <div className="rounded-lg bg-[oklch(0.95_0.07_50)] p-1.5 text-center">
-                              <div className="font-mono font-semibold text-[oklch(0.35_0.15_50)]">{order.order_code}</div>
-                              <div className="truncate text-[10px] text-muted-foreground">{order.customer_name}</div>
-                              <button onClick={() => markDone(order)} disabled={markingId === order.id}
-                                className="mt-1 w-full rounded bg-[oklch(0.65_0.16_145)] px-1 py-0.5 text-[10px] font-semibold text-white disabled:opacity-60">
-                                {markingId === order.id ? <Loader2 className="mx-auto h-3 w-3 animate-spin" /> : "✓ Mark Done"}
-                              </button>
-                            </div>
-                          )
-                        ) : (
-                          <div className={`rounded-lg p-1.5 text-center font-medium ${isPast ? "text-muted-foreground/30" : "bg-[oklch(0.97_0.04_140)] text-[oklch(0.50_0.12_140)]"}`}>
-                            {isPast ? "—" : "Free"}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  }))}
-                </tr>
+      <div className="overflow-x-auto rounded-2xl border bg-card shadow-card">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="bg-muted/60">
+              <th className="w-40 p-3 text-left font-semibold text-foreground">Time Slot</th>
+              {days.map((d) => (
+                <th key={ds(d)}
+                  className={`border-l p-3 text-center font-semibold ${ds(d) === todayStr ? "bg-cyan/10 text-cyan" : "text-muted-foreground"}`}
+                  style={{ minWidth: 140 }}>
+                  <div>{d.toLocaleDateString("en-KE", { weekday: "short" })}</div>
+                  <div className="text-xs font-normal">{d.toLocaleDateString("en-KE", { day: "numeric", month: "short" })}</div>
+                  {ds(d) === todayStr && <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-cyan">Today</div>}
+                </th>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </tr>
+          </thead>
+          <tbody>
+            {slots.map((slot) => (
+              <tr key={slot.key} className="border-t">
+                <td className="p-4 align-top">
+                  <div className="font-semibold text-foreground">{slot.label}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{slot.time}</div>
+                </td>
+                {days.map((d) => {
+                  const cellOrders = lookup[ds(d)]?.[slot.key] ?? [];
+                  const isPast = ds(d) < todayStr;
+                  return (
+                    <td key={`${slot.key}-${ds(d)}`}
+                      className={`border-l p-2 align-top ${ds(d) === todayStr ? "bg-cyan/5" : ""}`}>
+                      {cellOrders.length === 0 ? (
+                        <div className={`rounded-xl p-2 text-center text-xs font-medium ${isPast ? "text-muted-foreground/30" : "bg-[oklch(0.97_0.04_140)] text-[oklch(0.50_0.12_140)]"}`}>
+                          {isPast ? "—" : "Free"}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {cellOrders.map((order) =>
+                            order.status === "completed" ? (
+                              <div key={order.id} className="rounded-xl bg-[oklch(0.96_0.05_140)] p-2.5">
+                                <div className="font-mono text-xs font-bold text-[oklch(0.35_0.12_140)]">{order.order_code}</div>
+                                <div className="mt-0.5 text-xs text-muted-foreground">{order.technician_name}</div>
+                                <div className="mt-1 text-[10px] font-semibold text-[oklch(0.45_0.10_140)]">✓ Done</div>
+                              </div>
+                            ) : (
+                              <div key={order.id} className="rounded-xl bg-[oklch(0.95_0.07_50)] p-2.5">
+                                <div className="font-mono text-xs font-bold text-[oklch(0.35_0.15_50)]">{order.order_code}</div>
+                                <div className="mt-0.5 text-xs text-muted-foreground">{order.technician_name}</div>
+                                <div className="text-xs text-muted-foreground">{order.customer_name}</div>
+                                <button
+                                  onClick={() => markDone(order)}
+                                  disabled={markingId === order.id}
+                                  className="mt-1.5 w-full rounded-lg bg-[oklch(0.65_0.16_145)] px-2 py-1 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60">
+                                  {markingId === order.id
+                                    ? <Loader2 className="mx-auto h-3 w-3 animate-spin" />
+                                    : "✓ Mark Done"}
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-[oklch(0.97_0.04_140)]" /> Free</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-[oklch(0.95_0.07_50)]" /> Assigned</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-[oklch(0.96_0.05_140)]" /> Completed</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full bg-[oklch(0.97_0.04_140)]" /> Free</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full bg-[oklch(0.95_0.07_50)]" /> Assigned</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full bg-[oklch(0.96_0.05_140)]" /> Completed</span>
       </div>
     </div>
   );
