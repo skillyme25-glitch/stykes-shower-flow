@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as OrderRouteImport } from './routes/order'
 import { Route as AdminRouteImport } from './routes/dashboard'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ReceiptOrderIdRouteImport } from './routes/receipt.$orderId'
 
@@ -22,6 +23,11 @@ const OrderRoute = OrderRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,12 +43,14 @@ const ReceiptOrderIdRoute = ReceiptOrderIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/dashboard': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/dashboard': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/dashboard': typeof AdminRoute
   '/order': typeof OrderRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/order' | '/receipt/$orderId'
+  fullPaths: '/' | '/about' | '/dashboard' | '/order' | '/receipt/$orderId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/order' | '/receipt/$orderId'
-  id: '__root__' | '/' | '/dashboard' | '/order' | '/receipt/$orderId'
+  to: '/' | '/about' | '/dashboard' | '/order' | '/receipt/$orderId'
+  id: '__root__' | '/' | '/about' | '/dashboard' | '/order' | '/receipt/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   AdminRoute: typeof AdminRoute
   OrderRoute: typeof OrderRoute
   ReceiptOrderIdRoute: typeof ReceiptOrderIdRoute
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/order'
       fullPath: '/order'
       preLoaderRoute: typeof OrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   AdminRoute: AdminRoute,
   OrderRoute: OrderRoute,
   ReceiptOrderIdRoute: ReceiptOrderIdRoute,

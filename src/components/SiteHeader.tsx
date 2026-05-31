@@ -8,6 +8,7 @@ export function SiteHeader() {
         <Link to="/"><Logo /></Link>
         <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
           <Link to="/" className="text-muted-foreground transition hover:text-foreground">Home</Link>
+          <Link to="/about" className="text-muted-foreground transition hover:text-foreground">About</Link>
           <Link to="/order" className="text-muted-foreground transition hover:text-foreground">Order</Link>
         </nav>
         <Link

@@ -1,4 +1,5 @@
 import { Phone, Globe, MapPin } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Logo } from "./Logo";
 
 export function SiteFooter() {
@@ -21,8 +22,14 @@ export function SiteFooter() {
           </ul>
         </div>
         <div>
-          <h4 className="mb-4 text-sm font-semibold uppercase tracking-widest text-white/80">Why Stykes</h4>
+          <h4 className="mb-4 text-sm font-semibold uppercase tracking-widest text-white/80">Quick links</h4>
           <ul className="space-y-2 text-sm text-white/70">
+            <li><Link to="/" className="hover:text-white transition">Home</Link></li>
+            <li><Link to="/about" className="hover:text-white transition">About Us</Link></li>
+            <li><Link to="/order" className="hover:text-white transition">Place an Order</Link></li>
+          </ul>
+          <h4 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-widest text-white/80">Why Stykes</h4>
+          <ul className="space-y-1.5 text-sm text-white/70">
             <li>Premium-grade products</li>
             <li>Certified installers</li>
             <li>6-month workmanship warranty</li>
